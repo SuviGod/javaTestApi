@@ -17,6 +17,7 @@ import org.json.*;
 import com.sun.net.httpserver.*;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,14 +25,84 @@ import java.io.OutputStream;
 import java.lang.Object;
 import java.util.ArrayList;
 import java.util.Scanner;
-
-
+import java.util.Properties;
+import javax.mail.*;
+import javax.mail.internet.InternetAddress;
+import javax.mail.internet.MimeMessage;
 
 
 @SuppressWarnings("unused")
 public class Test {
 	private static String fileName = "emails.txt";
-	public static String getRate() throws URISyntaxException, IOException, InterruptedException {
+	
+	public static void sendEmails() throws URISyntaxException, IOException, InterruptedException {
+        File file = new File(fileName);
+        if (!file.exists()) return;
+        ArrayList <String> toEmails = new ArrayList<String>();
+        Scanner reader;
+		
+		reader = new Scanner(file);
+		
+        
+		while(reader.hasNextLine()) {
+			toEmails.add(reader.nextLine());
+		}
+		reader.close();
+		if (toEmails.isEmpty()) return;
+        
+        String fromEmail = "sulima.ivan@lll.kpi.ua";
+
+        String host = "smtp.gmail.com";
+
+        Properties properties = System.getProperties();
+
+        properties.put("mail.smtp.host", host);
+        properties.put("mail.smtp.port", "465");
+        properties.put("mail.smtp.ssl.enable", "true");
+        properties.put("mail.smtp.auth", "true");
+
+        // Get the Session object.// and pass username and password
+        Session session = Session.getInstance(properties, new javax.mail.Authenticator() {
+
+            protected PasswordAuthentication getPasswordAuthentication() {
+
+                return new PasswordAuthentication(fromEmail, "wsebnjqprptimnxe");
+
+            }
+
+        });
+
+        session.setDebug(true);
+
+        try {
+            MimeMessage message = new MimeMessage(session);
+            
+            for(int i = 0; i < toEmails.size(); i++) {
+            	message.setFrom(new InternetAddress(fromEmail));
+
+                message.addRecipient(Message.RecipientType.TO, new InternetAddress(toEmails.get(i)));
+
+                message.setSubject("Rate is comming!");
+
+                message.setText(getRate());
+
+                System.out.println("sending...");
+                Transport.send(message);
+                System.out.println("Sent message successfully....");
+            }
+        } catch (MessagingException mex) {
+            mex.printStackTrace();
+        }
+
+    }
+	
+	private static void sendEmailsPrimary(HttpExchange exchange) throws IOException, URISyntaxException, InterruptedException {
+		sendEmails();
+		exchange.sendResponseHeaders(200, 0);
+		OutputStream os = exchange.getResponseBody();
+		os.close();
+	}
+	private static String getRate() throws URISyntaxException, IOException, InterruptedException {
 		  
 		  HttpClient client = HttpClient.newBuilder()
 		      .version(Version.HTTP_2)
@@ -125,7 +196,7 @@ public class Test {
 	private static void handlePostRequest(HttpExchange exchange) throws IOException{
 	}
 	
-	private static void handler(HttpExchange exchange) throws IOException {
+	private static void handler(HttpExchange exchange) throws IOException, URISyntaxException, InterruptedException {
 		if ("GET".equals(exchange.getRequestMethod())) {
 			if("/rate".equals(exchange.getRequestURI().toString())){
 				rate(exchange);
@@ -134,7 +205,7 @@ public class Test {
 			if("/subscribe".equals(exchange.getRequestURI().toString())){
 				subscribe(exchange);
 			}else if("/sendEmails".equals(exchange.getRequestURI().toString())){
-				
+				sendEmailsPrimary(exchange);
 			}
 		}
 	}
@@ -144,7 +215,14 @@ public class Test {
 		HttpServer server;
 	    try {
 			  server = HttpServer.create(new InetSocketAddress(8000), 0);
-			  server.createContext("/", Test::handler);
+			  server.createContext("/", exchange -> {
+				try {
+					handler(exchange);
+				} catch (URISyntaxException | InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			});
 			  server.start();
 	    } catch (IOException e) {
 	    
